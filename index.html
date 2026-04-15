@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Transit Decision Engine — Miss It or Wait?</title>
+  <meta name="description" content="Real-time, personalized transit readiness tool. Know before you go — catch the right ride at the right pace." />
+  <meta property="og:title" content="Smart Transit Decision Engine" />
+  <meta property="og:description" content="Should you sprint or chill? Get an instant verdict in under 3 seconds." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app-wrapper">
+
+  <!-- ══════════════════════════════════════════════════════
+       SCREEN 1 — SETUP
+  ═══════════════════════════════════════════════════════ -->
+  <div id="screen-setup" class="screen active">
+
+    <!-- Header -->
+    <div class="app-header">
+      <div class="app-logo">
+        <div class="logo-icon">🚦</div>
+        <h1>Transit Decision Engine</h1>
+      </div>
+      <p class="app-tagline">MISS IT OR WAIT? · Know before you go</p>
+    </div>
+
+    <!-- GPS Location Banner -->
+    <div class="glass-card" style="padding:14px 16px;">
+      <div class="gps-banner" style="background:none;border:none;padding:0;">
+        <div class="gps-dot"></div>
+        <div class="gps-info">
+          <div class="gps-status" id="gps-status-text">Acquiring location...</div>
+          <div class="gps-coords" id="gps-coords">Waiting for GPS...</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:0.7rem;color:var(--text-muted);" id="nearest-stop-info"></div>
+    </div>
+
+    <!-- Your Pace Profile -->
+    <div class="glass-card">
+      <div class="section-label">Your Walking Pace</div>
+      <div class="speed-options">
+        <div class="speed-option" data-pace="casual" id="pace-casual">
+          <div class="check-badge">✓</div>
+          <div class="pace-icon">🚶</div>
+          <div class="pace-name">Casual</div>
+          <div class="pace-speed">~4 km/h</div>
+        </div>
+        <div class="speed-option selected" data-pace="brisk" id="pace-brisk">
+          <div class="check-badge">✓</div>
+          <div class="pace-icon">🚶‍♂️</div>
+          <div class="pace-name">Brisk</div>
+          <div class="pace-speed">~5.5 km/h</div>
+        </div>
+        <div class="speed-option" data-pace="jog" id="pace-jog">
+          <div class="check-badge">✓</div>
+          <div class="pace-icon">🏃</div>
+          <div class="pace-name">Jog</div>
+          <div class="pace-speed">~9.4 km/h</div>
+        </div>
+      </div>
+      <div class="manual-speed-row">
+        <label for="speed-slider">Fine-tune speed</label>
+        <input type="range" id="speed-slider" min="0.8" max="3.5" step="0.1" value="1.5" />
+        <span class="speed-val" id="speed-val-display">1.5 m/s</span>
+      </div>
+    </div>
+
+    <!-- Destination -->
+    <div class="glass-card">
+      <div class="section-label">Where are you headed?</div>
+      <div class="dest-input-wrap">
+        <span class="dest-icon">📍</span>
+        <input
+          type="text"
+          id="destination-input"
+          placeholder="Type destination (e.g. Koramangala)"
+          autocomplete="off"
+        />
+        <div class="dest-suggestions" id="dest-suggestions" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Weather Conditions -->
+    <div class="glass-card">
+      <div class="section-label">Current Weather</div>
+      <div class="weather-options">
+        <div class="weather-option selected" data-weather="clear" id="wx-clear">
+          <div class="wx-icon">☀️</div>
+          <div class="wx-name">Clear</div>
+          <div class="wx-penalty">Normal speed</div>
+        </div>
+        <div class="weather-option" data-weather="rain" id="wx-rain">
+          <div class="wx-icon">🌧</div>
+          <div class="wx-name">Light Rain</div>
+          <div class="wx-penalty">−18% speed</div>
+        </div>
+        <div class="weather-option" data-weather="heavy" id="wx-heavy">
+          <div class="wx-icon">⛈️</div>
+          <div class="wx-name">Heavy Rain</div>
+          <div class="wx-penalty">−38% speed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <button class="btn-primary" id="btn-check">
+      🔍 &nbsp;Check My Options
+    </button>
+
+  </div><!-- /screen-setup -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       SCREEN 2 — LOADING / RADAR
+  ═══════════════════════════════════════════════════════ -->
+  <div id="screen-loading" class="screen">
+
+    <!-- Radar Animation -->
+    <div class="radar-wrap">
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-blip"></div>
+      <div class="radar-blip"></div>
+      <div class="radar-blip"></div>
+      <div class="radar-center">🚌</div>
+      <div class="radar-sweep"></div>
+    </div>
+
+    <div class="loading-title">Scanning Live Transit Data</div>
+
+    <div class="loading-steps" id="loading-steps">
+      <!-- dynamically populated by app.js -->
+    </div>
+
+  </div><!-- /screen-loading -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       SCREEN 3 — VERDICT
+  ═══════════════════════════════════════════════════════ -->
+  <div id="screen-verdict" class="screen">
+
+    <!-- Header -->
+    <div class="app-header">
+      <div class="app-logo">
+        <div class="logo-icon">🚦</div>
+        <h1>Transit Decision Engine</h1>
+      </div>
+      <p class="app-tagline">LIVE VERDICT</p>
+    </div>
+
+    <!-- Verdict Banner -->
+    <div class="verdict-banner go" id="verdict-banner">
+      <span class="verdict-emoji" id="verdict-emoji">🏃</span>
+      <div class="verdict-text" id="verdict-text">LEAVE NOW — JOG!</div>
+      <div class="verdict-sub"  id="verdict-sub">Calculating...</div>
+    </div>
+
+    <!-- Departure Countdown Timer -->
+    <div class="departure-timer glass-card">
+      <div class="timer-label">
+        <div class="tl-top">Departure window</div>
+        <div class="tl-desc" id="timer-desc">until you must leave</div>
+        <div class="pace-badge walk" id="pace-badge">🚶‍♂️ Brisk Walk</div>
+      </div>
+      <div>
+        <div class="timer-display" id="timer-display" style="color:var(--amber);">—</div>
+        <div style="font-size:0.6rem;color:var(--text-muted);text-align:right;margin-top:2px;">HH:MM:SS</div>
+      </div>
+    </div>
+
+    <!-- Primary Bus Card -->
+    <div class="section-label" style="padding: 0 4px;">🚌 Bus Options</div>
+
+    <div class="transit-card primary glass-card" id="bus-card-primary">
+      <!-- rendered by JS -->
+    </div>
+
+    <div class="transit-card secondary glass-card" id="bus-card-secondary">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- Metro Card -->
+    <div class="section-label" style="padding: 0 4px;">🚇 Metro Alternative</div>
+
+    <div class="transit-card glass-card" id="metro-card"
+         style="border-color: rgba(179,136,255,0.25);">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="action-row">
+      <button class="btn-secondary" id="btn-back">
+        ← Back
+      </button>
+      <button class="btn-recalc" id="btn-recalc">
+        🔄 Recalculate
+      </button>
+    </div>
+
+  </div><!-- /screen-verdict -->
+
+</div><!-- /app-wrapper -->
+
+<script src="app.js"></script>
+</body>
+</html>
