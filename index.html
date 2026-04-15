@@ -41,25 +41,32 @@
 
     <!-- Your Pace Profile -->
     <div class="glass-card">
-      <div class="section-label">Your Walking Pace</div>
+      <div class="section-label">Movement Profile · Google Fit</div>
+      <div class="fit-source-row">
+        <span class="fit-icon">💪</span>
+        <span class="fit-desc">Times below are estimated from your fitness data. Select the pace you'll use today.</span>
+      </div>
       <div class="speed-options">
         <div class="speed-option" data-pace="casual" id="pace-casual">
           <div class="check-badge">✓</div>
           <div class="pace-icon">🚶</div>
           <div class="pace-name">Casual</div>
           <div class="pace-speed">~4 km/h</div>
+          <div class="pace-time" id="pace-time-casual">— min</div>
         </div>
         <div class="speed-option selected" data-pace="brisk" id="pace-brisk">
           <div class="check-badge">✓</div>
           <div class="pace-icon">🚶‍♂️</div>
           <div class="pace-name">Brisk</div>
           <div class="pace-speed">~5.5 km/h</div>
+          <div class="pace-time" id="pace-time-brisk">— min</div>
         </div>
         <div class="speed-option" data-pace="jog" id="pace-jog">
           <div class="check-badge">✓</div>
           <div class="pace-icon">🏃</div>
           <div class="pace-name">Jog</div>
           <div class="pace-speed">~9.4 km/h</div>
+          <div class="pace-time" id="pace-time-jog">— min</div>
         </div>
       </div>
       <div class="manual-speed-row">
@@ -69,8 +76,8 @@
       </div>
     </div>
 
-    <!-- Destination -->
-    <div class="glass-card">
+    <!-- Destination — z-index elevated so dropdown clears cards below -->
+    <div class="glass-card dest-card">
       <div class="section-label">Where are you headed?</div>
       <div class="dest-input-wrap">
         <span class="dest-icon">📍</span>
@@ -84,10 +91,27 @@
       </div>
     </div>
 
-    <!-- Weather Conditions -->
+    <!-- Weather Conditions — auto-fetched via Open-Meteo -->
     <div class="glass-card">
       <div class="section-label">Current Weather</div>
-      <div class="weather-options">
+
+      <!-- Auto-detected row -->
+      <div class="weather-auto-row" id="weather-auto-row">
+        <div class="weather-auto-icon" id="weather-auto-icon">⏳</div>
+        <div class="weather-auto-info">
+          <div class="weather-auto-label" id="weather-auto-label">Fetching weather...</div>
+          <div class="weather-auto-detail" id="weather-auto-detail">Using your GPS location</div>
+        </div>
+        <div class="weather-auto-badge" id="weather-auto-badge">AUTO</div>
+      </div>
+
+      <!-- Manual override toggle -->
+      <button class="weather-override-toggle" id="weather-override-toggle" onclick="toggleWeatherOverride()">
+        ✏️ Override manually
+      </button>
+
+      <!-- Manual options — hidden by default, shown on override -->
+      <div class="weather-options" id="weather-manual-options" style="display:none; margin-top:10px;">
         <div class="weather-option selected" data-weather="clear" id="wx-clear">
           <div class="wx-icon">☀️</div>
           <div class="wx-name">Clear</div>
@@ -191,6 +215,11 @@
 
     <div class="transit-card glass-card" id="metro-card"
          style="border-color: rgba(179,136,255,0.25);">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- Comparison Breakdown -->
+    <div class="glass-card comparison-card" id="comparison-card">
       <!-- rendered by JS -->
     </div>
 

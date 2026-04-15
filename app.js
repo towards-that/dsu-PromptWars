@@ -74,6 +74,7 @@ const state = {
   selectedPace: 'brisk',
   manualSpeedMps: null,
   weather: 'clear',
+  weatherManualOverride: false,
   destination: null,
   nearestStop: null,
   distanceToStop: null,  // meters
@@ -112,6 +113,31 @@ function formatMinutes(sec) {
   return s > 0 ? `${m} min ${s}s` : `${m} min`;
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function paceToBadgeClass(paceKey) {
+  return paceKey === 'casual' ? 'walk' : paceKey;
+}
+
+function formatCurrency(amount) {
+  return `Rs ${amount.toFixed(0)}`;
+}
+
+function findNearestMetroStation(lat, lng) {
+  let nearest = METRO_STATIONS[0];
+  let nearestDist = Infinity;
+  METRO_STATIONS.forEach((station) => {
+    const dist = haversine(lat, lng, station.lat, station.lng);
+    if (dist < nearestDist) {
+      nearest = station;
+      nearestDist = dist;
+    }
+  });
+  return { station: nearest, distance: nearestDist };
+}
+
 // ── GPS Location ──────────────────────────────────────────────────────────
 
 function requestGPS() {
@@ -138,6 +164,7 @@ function requestGPS() {
       coords.textContent = `${state.userLat.toFixed(5)}, ${state.userLng.toFixed(5)}  ±${state.gpsAccuracy}m`;
 
       findNearestStop();
+      fetchWeather();
     },
     (err) => {
       console.warn('GPS error:', err.message);
@@ -148,7 +175,7 @@ function requestGPS() {
 }
 
 function useFallbackLocation() {
-  // Default: Koramangala, Bengaluru
+  // Keep the simulated coords in Bengaluru range (~Koramangala)
   state.userLat = 12.9352 + (Math.random() - 0.5) * 0.008;
   state.userLng = 77.6245 + (Math.random() - 0.5) * 0.008;
   state.gpsAccuracy = 45;
@@ -162,6 +189,7 @@ function useFallbackLocation() {
   coords.textContent = `${state.userLat.toFixed(5)}, ${state.userLng.toFixed(5)}  [simulated]`;
 
   findNearestStop();
+  fetchWeather();
 }
 
 function findNearestStop() {
@@ -183,6 +211,118 @@ function findNearestStop() {
   const stopEl = document.getElementById('nearest-stop-info');
   if (stopEl) {
     stopEl.textContent = `Nearest stop: ${nearest.name} · ${formatDist(state.distanceToStop)} away`;
+  }
+
+  // Now that distance is known, update pace time estimates
+  updatePaceTimings();
+}
+
+// ── Pace Time Estimates (simulated from Fit data) ─────────────────────────
+
+function updatePaceTimings() {
+  if (!state.distanceToStop) return;
+  const dist    = state.distanceToStop;
+  const penalty = WEATHER[state.weather]?.penalty ?? 1.0;
+
+  Object.entries(SPEED_PROFILES).forEach(([key, profile]) => {
+    const timeSec = dist / (profile.mps * penalty);
+    const el = document.getElementById(`pace-time-${key}`);
+    if (el) el.textContent = formatMinutes(timeSec) + ' to stop';
+  });
+}
+
+// ── Auto Weather Fetch (Open-Meteo — free, no API key) ────────────────────
+
+async function fetchWeather() {
+  if (!state.userLat || !state.userLng) return;
+
+  const iconEl   = document.getElementById('weather-auto-icon');
+  const labelEl  = document.getElementById('weather-auto-label');
+  const detailEl = document.getElementById('weather-auto-detail');
+  const badgeEl  = document.getElementById('weather-auto-badge');
+
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.userLat.toFixed(4)}&longitude=${state.userLng.toFixed(4)}&current=weather_code,temperature_2m,precipitation,wind_speed_10m&timezone=auto`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Bad response');
+    const data = await resp.json();
+
+    const code   = data.current.weather_code;
+    const temp   = Math.round(data.current.temperature_2m);
+    const precip = data.current.precipitation ?? 0;
+    const wind   = Math.round(data.current.wind_speed_10m ?? 0);
+
+    // Map WMO weather code → our 3 speed-impact categories
+    let weatherKey = 'clear', emoji = '☀️', label = 'Clear Sky';
+    if      (code === 0)               { weatherKey='clear'; emoji='☀️';  label='Clear Sky'; }
+    else if (code === 1)               { weatherKey='clear'; emoji='🌤';  label='Mainly Clear'; }
+    else if (code === 2)               { weatherKey='clear'; emoji='⛅';  label='Partly Cloudy'; }
+    else if (code === 3)               { weatherKey='clear'; emoji='☁️';  label='Overcast'; }
+    else if (code >= 45 && code <= 48) { weatherKey='rain';  emoji='🌫';  label='Foggy'; }
+    else if (code >= 51 && code <= 55) { weatherKey='rain';  emoji='🌦';  label='Drizzle'; }
+    else if (code >= 56 && code <= 57) { weatherKey='rain';  emoji='🌧';  label='Freezing Drizzle'; }
+    else if (code >= 61 && code <= 63) { weatherKey='rain';  emoji='🌧';  label='Light Rain'; }
+    else if (code >= 64 && code <= 65) { weatherKey='heavy'; emoji='🌧';  label='Heavy Rain'; }
+    else if (code >= 71 && code <= 77) { weatherKey='heavy'; emoji='❄️';  label='Snowfall'; }
+    else if (code >= 80 && code <= 81) { weatherKey='rain';  emoji='🌦';  label='Light Showers'; }
+    else if (code === 82)              { weatherKey='heavy'; emoji='⛈️';  label='Violent Showers'; }
+    else if (code >= 95)               { weatherKey='heavy'; emoji='⛈️';  label='Thunderstorm'; }
+
+    // Apply to state (unless user has manually overridden)
+    if (!state.weatherManualOverride) {
+      state.weather = weatherKey;
+      updatePaceTimings(); // Recompute with correct weather penalty
+    }
+
+    // Sync the manual radio buttons to auto-detected value
+    if (!state.weatherManualOverride) {
+      document.querySelectorAll('.weather-option').forEach(o => o.classList.remove('selected'));
+      const matched = document.querySelector(`.weather-option[data-weather="${weatherKey}"]`);
+      if (matched) matched.classList.add('selected');
+    }
+
+    // Update UI row
+    iconEl.textContent   = emoji;
+    labelEl.textContent  = `${label} · ${temp}°C  💨 ${wind} km/h`;
+    detailEl.textContent = precip > 0 ? `Precipitation: ${precip.toFixed(1)} mm` : 'No precipitation';
+    badgeEl.textContent  = state.weatherManualOverride ? 'MANUAL' : 'AUTO';
+    badgeEl.className    = state.weatherManualOverride ? 'weather-auto-badge manual' : 'weather-auto-badge';
+
+  } catch (err) {
+    console.warn('Weather fetch failed:', err);
+    iconEl.textContent   = '🌡';
+    labelEl.textContent  = 'Weather unavailable';
+    detailEl.textContent = 'Select condition manually below';
+    badgeEl.textContent  = 'OFFLINE';
+    badgeEl.style.cssText = 'background:rgba(255,82,82,0.12);color:var(--red);border-color:rgba(255,82,82,0.3)';
+    // Auto-expand manual options so user isn't blocked
+    const manualOpts = document.getElementById('weather-manual-options');
+    if (manualOpts) manualOpts.style.display = 'grid';
+    const toggleBtn = document.getElementById('weather-override-toggle');
+    if (toggleBtn) toggleBtn.textContent = '✕ Use auto-detected';
+  }
+}
+
+// ── Weather Override Toggle ───────────────────────────────────────────────
+
+function toggleWeatherOverride() {
+  const manualOpts = document.getElementById('weather-manual-options');
+  const toggleBtn  = document.getElementById('weather-override-toggle');
+  const badgeEl    = document.getElementById('weather-auto-badge');
+  const isShown    = manualOpts.style.display !== 'none';
+
+  if (isShown) {
+    // Collapse → revert to auto
+    manualOpts.style.display    = 'none';
+    toggleBtn.textContent       = '✏️ Override manually';
+    state.weatherManualOverride = false;
+    badgeEl.textContent         = 'AUTO';
+    badgeEl.className           = 'weather-auto-badge';
+    fetchWeather(); // Re-apply auto weather
+  } else {
+    // Expand manual options
+    manualOpts.style.display = 'grid';
+    toggleBtn.textContent    = '✕ Use auto-detected';
   }
 }
 
@@ -244,63 +384,134 @@ function runDecision() {
 
   const bus = state.busData;
   const metro = state.metroData;
+  const destination = state.destination;
+  const nearestMetro = findNearestMetroStation(state.userLat, state.userLng);
+
+  const busInVehicleSec = 500 + haversine(state.nearestStop.lat, state.nearestStop.lng, destination.lat, destination.lng) / 7.2;
+  const metroInVehicleSec = 300 + haversine(nearestMetro.station.lat, nearestMetro.station.lng, destination.lat, destination.lng) / 10.8;
+  const metroAccessSec = nearestMetro.distance / effectiveSpeed;
 
   const canMakeBus = walkTimeSec < bus.etaSec;
-  const canMakeMetro = walkTimeSec < metro.etaSec;
+  const canMakeMetro = metroAccessSec < metro.etaSec;
 
-  // Comfort score: lower occupancy = better
-  const busComfortable = bus.occupancyPct < 70;
-  const nextBusComfort  = bus.nextBus.occupancyPct < bus.occupancyPct - 10;
-  const waitSaving      = bus.nextBus.etaSec - bus.etaSec;  // how much longer wait is
+  const busCurrentTripSec = walkTimeSec + bus.etaSec + busInVehicleSec;
+  const busNextTripSec = walkTimeSec + bus.nextBus.etaSec + busInVehicleSec;
+  const metroTripSec = metroAccessSec + metro.etaSec + metroInVehicleSec;
 
-  // Needed pace to catch the bus
-  let neededPace = 'walk';
-  const distForWalk  = bus.etaSec * SPEED_PROFILES.casual.mps;
-  const distForBrisk = bus.etaSec * SPEED_PROFILES.brisk.mps;
-  const distForJog   = bus.etaSec * SPEED_PROFILES.jog.mps;
+  const busCurrentFare = 18 + Math.round(haversine(state.nearestStop.lat, state.nearestStop.lng, destination.lat, destination.lng) / 1800);
+  const busNextFare = busCurrentFare;
+  const metroFare = 25 + Math.round(haversine(nearestMetro.station.lat, nearestMetro.station.lng, destination.lat, destination.lng) / 2200);
 
-  if (distToStop > distForBrisk) neededPace = 'jog';
-  else if (distToStop > distForWalk) neededPace = 'brisk';
+  const busCurrentComfort = clamp01(1 - bus.occupancyPct / 100);
+  const busNextComfort = clamp01(1 - bus.nextBus.occupancyPct / 100);
+  const metroComfort = clamp01(1 - metro.bestCoach.pct / 100);
 
-  // Time remaining before you MUST leave (clamped to > 0)
-  const mustLeaveIn = Math.max(bus.etaSec - walkTimeSec, 5);
+  const maxFare = Math.max(busCurrentFare, busNextFare, metroFare);
+  const timeFastest = Math.min(busCurrentTripSec, busNextTripSec, metroTripSec);
+  const timeSlowest = Math.max(busCurrentTripSec, busNextTripSec, metroTripSec);
+  const timeRange = Math.max(1, timeSlowest - timeFastest);
 
-  // Main verdict logic
-  let verdictType, verdictText, verdictSub, verdictEmoji;
+  const scoreOption = ({ totalSec, comfort, fare, catchable }) => {
+    const timeScore = 1 - ((totalSec - timeFastest) / timeRange);
+    const costScore = 1 - (fare / maxFare);
+    const catchPenalty = catchable ? 1 : -0.5;
+    return (timeScore * 0.5) + (comfort * 0.3) + (costScore * 0.2) + catchPenalty;
+  };
 
-  if (canMakeBus) {
-    if (busComfortable || !nextBusComfort || waitSaving > 10 * 60) {
-      // Catch this bus
-      verdictType = 'go';
-      verdictEmoji = neededPace === 'jog' ? '🏃' : neededPace === 'brisk' ? '🚶‍♂️' : '✅';
-      verdictText = neededPace === 'jog'   ? 'LEAVE NOW — JOG!'
-                  : neededPace === 'brisk' ? 'LEAVE NOW — BRISK WALK'
-                  : 'LEAVE NOW — WALK';
-      verdictSub = `You have ${formatMinutes(mustLeaveIn)} before you must step out`;
-    } else {
-      // Bus too full, next is better and nearby
-      verdictType = 'wait';
-      verdictEmoji = '😌';
-      verdictText = 'WAIT — NEXT IS BETTER';
-      verdictSub = `Current bus is ${bus.occupancyPct}% full · Next in ${Math.round(bus.nextBus.etaSec/60)} min at ${bus.nextBus.occupancyPct}%`;
-    }
+  const options = [
+    {
+      id: 'bus-current',
+      label: `Bus ${bus.route.num}`,
+      totalSec: busCurrentTripSec,
+      comfort: busCurrentComfort,
+      fare: busCurrentFare,
+      catchable: canMakeBus,
+      etaSec: bus.etaSec,
+      occupancyPct: bus.occupancyPct,
+    },
+    {
+      id: 'bus-next',
+      label: `Next Bus ${bus.nextBus.route.num}`,
+      totalSec: busNextTripSec,
+      comfort: busNextComfort,
+      fare: busNextFare,
+      catchable: true,
+      etaSec: bus.nextBus.etaSec,
+      occupancyPct: bus.nextBus.occupancyPct,
+    },
+    {
+      id: 'metro',
+      label: `Metro ${metro.station.line}`,
+      totalSec: metroTripSec,
+      comfort: metroComfort,
+      fare: metroFare,
+      catchable: canMakeMetro,
+      etaSec: metro.etaSec,
+      occupancyPct: metro.bestCoach.pct,
+    },
+  ].map((option) => ({ ...option, score: scoreOption(option) }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = options[0];
+  const second = options[1];
+
+  // Needed pace to catch currently selected best option
+  const chosenEtaSec = best.id === 'metro' ? metro.etaSec : (best.id === 'bus-next' ? bus.nextBus.etaSec : bus.etaSec);
+  const targetDistance = best.id === 'metro' ? nearestMetro.distance : distToStop;
+  const distForCasual = chosenEtaSec * SPEED_PROFILES.casual.mps * weatherPenalty;
+  const distForBrisk = chosenEtaSec * SPEED_PROFILES.brisk.mps * weatherPenalty;
+  let neededPace = 'casual';
+  if (targetDistance > distForBrisk) neededPace = 'jog';
+  else if (targetDistance > distForCasual) neededPace = 'brisk';
+
+  const mustLeaveIn = Math.max(chosenEtaSec - (targetDistance / effectiveSpeed), 5);
+
+  let verdictType = 'wait';
+  let verdictText = 'WAIT';
+  let verdictSub = '';
+  let verdictEmoji = '⏳';
+
+  if (best.id === 'metro') {
+    verdictType = 'metro';
+    verdictEmoji = canMakeMetro ? '🚇' : '⏱';
+    verdictText = canMakeMetro ? 'TAKE METRO INSTEAD' : 'METRO IS BEST NEXT';
+    verdictSub = canMakeMetro
+      ? `Lower crowd and faster trip than bus right now`
+      : `Metro wins overall, but leave for the next one`;
+  } else if (best.id === 'bus-current' && canMakeBus) {
+    verdictType = 'go';
+    verdictEmoji = neededPace === 'jog' ? '🏃' : neededPace === 'brisk' ? '🚶‍♂️' : '✅';
+    verdictText = neededPace === 'jog' ? 'LEAVE NOW — JOG!' :
+      neededPace === 'brisk' ? 'LEAVE NOW — BRISK WALK' : 'LEAVE NOW — WALK';
+    verdictSub = `You have ${formatMinutes(mustLeaveIn)} before you must step out`;
   } else {
-    // Can't make this bus
     verdictType = 'wait';
-    verdictEmoji = '⏳';
-    verdictText  = "CAN'T MAKE IT";
-    verdictSub = `Next bus arrives in ${Math.round(bus.nextBus.etaSec / 60)} min — you have time`;
+    verdictEmoji = '😌';
+    verdictText = 'WAIT — NEXT OPTION WINS';
+    verdictSub = `${best.label} in ${Math.round(best.etaSec / 60)} min with better overall score`;
   }
 
-  // Destination ETA (walk + bus journey simulation)
-  const journeyMinutes = Math.round(10 + Math.random() * 25);
-  const destEta = new Date(Date.now() + (bus.etaSec + journeyMinutes * 60) * 1000);
-  const destEtaStr = destEta.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const busCurrentEta = new Date(Date.now() + busCurrentTripSec * 1000);
+  const busNextEta = new Date(Date.now() + busNextTripSec * 1000);
+  const metroEta = new Date(Date.now() + metroTripSec * 1000);
+
+  const formatEtaClock = (dt) => dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   return {
     verdictType, verdictText, verdictSub, verdictEmoji,
     neededPace, mustLeaveIn, canMakeBus, canMakeMetro,
-    effectiveSpeed, walkTimeSec, destEtaStr, journeyMinutes,
+    effectiveSpeed, walkTimeSec,
+    busCurrentTripSec, busNextTripSec, metroTripSec,
+    busCurrentDestEtaStr: formatEtaClock(busCurrentEta),
+    busNextDestEtaStr: formatEtaClock(busNextEta),
+    metroDestEtaStr: formatEtaClock(metroEta),
+    busCurrentFare, busNextFare, metroFare,
+    comparison: {
+      best,
+      second,
+      rationale: `Best score: ${best.label} (${best.score.toFixed(2)}) vs ${second.label} (${second.score.toFixed(2)})`,
+      options,
+    },
   };
 }
 
@@ -323,11 +534,19 @@ function renderVerdict() {
   const timerDesc  = document.getElementById('timer-desc');
   const paceBadge  = document.getElementById('pace-badge');
 
-  if (v.verdictType === 'go') {
-    timerEl.style.color = v.neededPace === 'jog' ? 'var(--red)' : v.neededPace === 'brisk' ? 'var(--amber)' : 'var(--green)';
+  if (v.verdictType === 'go' || v.verdictType === 'metro') {
+    timerEl.style.color =
+      v.verdictType === 'metro'
+        ? 'var(--purple)'
+        : (v.neededPace === 'jog' ? 'var(--red)' : v.neededPace === 'brisk' ? 'var(--amber)' : 'var(--green)');
     timerDesc.textContent = 'until you must leave';
-    paceBadge.textContent = `${SPEED_PROFILES[v.neededPace].emoji} ${SPEED_PROFILES[v.neededPace].label}`;
-    paceBadge.className = `pace-badge ${v.neededPace}`;
+    if (v.verdictType === 'metro') {
+      paceBadge.textContent = '🚇 Head to metro now';
+      paceBadge.className = 'pace-badge metro';
+    } else {
+      paceBadge.textContent = `${SPEED_PROFILES[v.neededPace].emoji} ${SPEED_PROFILES[v.neededPace].label}`;
+      paceBadge.className = `pace-badge ${paceToBadgeClass(v.neededPace)}`;
+    }
   } else {
     timerEl.style.color = 'var(--blue)';
     timerDesc.textContent = 'until next bus arrives';
@@ -336,16 +555,17 @@ function renderVerdict() {
   }
 
   // Start countdown
-  startCountdown(v.verdictType === 'go' ? v.mustLeaveIn : bus.nextBus.etaSec);
+  startCountdown((v.verdictType === 'go' || v.verdictType === 'metro') ? v.mustLeaveIn : bus.nextBus.etaSec);
 
   // PRIMARY BUS CARD
   renderBusCard('primary', bus, v);
 
   // SECONDARY BUS CARD (next bus)
-  renderBusCard('secondary', bus.nextBus, null);
+  renderBusCard('secondary', bus.nextBus, v);
 
   // METRO CARD
   renderMetroCard(metro);
+  renderComparisonInsights(v);
 }
 
 function renderBusCard(type, data, v) {
@@ -360,8 +580,9 @@ function renderBusCard(type, data, v) {
   const etaMin = Math.round(data.etaSec / 60);
   const etaSec = data.etaSec % 60;
 
-  const destStr = v ? v.destEtaStr : '—';
+  const destStr = !v ? '—' : (isNext ? v.busNextDestEtaStr : v.busCurrentDestEtaStr);
   const walkStr = v ? formatMinutes(v.walkTimeSec) : '—';
+  const fare = !v ? '—' : formatCurrency(isNext ? v.busNextFare : v.busCurrentFare);
 
   const el = document.getElementById(`bus-card-${type}`);
   el.innerHTML = `
@@ -403,6 +624,10 @@ function renderBusCard(type, data, v) {
       <div class="detail-item">
         <div class="d-label">Arrive at dest.</div>
         <div class="d-val">${destStr}</div>
+      </div>
+      <div class="detail-item">
+        <div class="d-label">Estimated fare</div>
+        <div class="d-val">${fare}</div>
       </div>
     </div>
   `;
@@ -457,6 +682,10 @@ function renderMetroCard(metro) {
         <span>📍</span>
         <span>Stand at <strong>${metro.platformEnd}</strong> for Coach ${bestC.num}</span>
       </div>
+      <div class="platform-hint" style="margin-top:8px;border-color:rgba(179,136,255,0.3);background:rgba(179,136,255,0.08);color:var(--purple);">
+        <span>💸</span>
+        <span>Estimated fare: <strong>${formatCurrency(state.verdict.metroFare)}</strong> · ETA at destination <strong>${state.verdict.metroDestEtaStr}</strong></span>
+      </div>
     </div>
   `;
 
@@ -467,6 +696,35 @@ function renderMetroCard(metro) {
       if (el) el.style.height = `${c.pct}%`;
     });
   }, 400);
+}
+
+function renderComparisonInsights(v) {
+  const el = document.getElementById('comparison-card');
+  if (!el || !v.comparison) return;
+
+  const winner = v.comparison.best;
+  const runner = v.comparison.second;
+  const rows = v.comparison.options
+    .map((option) => `
+      <div class="cmp-row ${option.id === winner.id ? 'winner' : ''}">
+        <div class="cmp-mode">${option.label}</div>
+        <div class="cmp-metric">${Math.round(option.totalSec / 60)} min</div>
+        <div class="cmp-metric">${option.occupancyPct}%</div>
+        <div class="cmp-metric">${formatCurrency(option.fare)}</div>
+      </div>
+    `).join('');
+
+  el.innerHTML = `
+    <div class="section-label" style="margin-bottom:8px;">Decision Breakdown</div>
+    <div class="cmp-summary">
+      <strong>${winner.label}</strong> beats <strong>${runner.label}</strong>
+      <span>${v.comparison.rationale}</span>
+    </div>
+    <div class="cmp-head">
+      <div>Mode</div><div>Trip</div><div>Crowd</div><div>Cost</div>
+    </div>
+    ${rows}
+  `;
 }
 
 // ── Timer Countdown ───────────────────────────────────────────────────────
@@ -489,7 +747,7 @@ function startCountdown(initialSec) {
         state.verdict.neededPace = pace;
         timerEl.style.color = pace === 'jog' ? 'var(--red)' : pace === 'brisk' ? 'var(--amber)' : 'var(--green)';
         badge.textContent = `${SPEED_PROFILES[pace].emoji} ${SPEED_PROFILES[pace].label}`;
-        badge.className   = `pace-badge ${pace}`;
+        badge.className   = `pace-badge ${paceToBadgeClass(pace)}`;
       }
     }
 
@@ -513,7 +771,7 @@ function getPaceForTime(secRemaining) {
   const needed = dist / secRemaining;
   const casualEff = SPEED_PROFILES.casual.mps * penalty;
   const briskEff  = SPEED_PROFILES.brisk.mps  * penalty;
-  if (needed <= casualEff) return 'walk';
+  if (needed <= casualEff) return 'casual';
   if (needed <= briskEff)  return 'brisk';
   return 'jog';
 }
@@ -667,6 +925,19 @@ document.querySelectorAll('.weather-option').forEach(opt => {
     document.querySelectorAll('.weather-option').forEach(o => o.classList.remove('selected'));
     opt.classList.add('selected');
     state.weather = opt.dataset.weather;
+    state.weatherManualOverride = true;
+
+    // Update badge to MANUAL
+    const badgeEl = document.getElementById('weather-auto-badge');
+    if (badgeEl) {
+      badgeEl.textContent = 'MANUAL';
+      badgeEl.className   = 'weather-auto-badge manual';
+    }
+    const toggleBtn = document.getElementById('weather-override-toggle');
+    if (toggleBtn) toggleBtn.textContent = '✕ Use auto-detected';
+
+    // Recompute pace timings with new weather penalty
+    updatePaceTimings();
   });
 });
 
