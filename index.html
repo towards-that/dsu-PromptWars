@@ -3,67 +3,85 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://api.open-meteo.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;" />
   <title>Smart Transit Decision Engine — Miss It or Wait?</title>
   <meta name="description" content="Real-time, personalized transit readiness tool. Know before you go — catch the right ride at the right pace." />
   <meta property="og:title" content="Smart Transit Decision Engine" />
   <meta property="og:description" content="Should you sprint or chill? Get an instant verdict in under 3 seconds." />
+  <meta name="theme-color" content="#070d1a" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<div class="app-wrapper">
+<!-- Skip navigation for accessibility -->
+<a href="#main-content" class="skip-nav">Skip to main content</a>
+
+<div class="app-wrapper" id="main-content">
 
   <!-- ══════════════════════════════════════════════════════
        SCREEN 1 — SETUP
   ═══════════════════════════════════════════════════════ -->
-  <div id="screen-setup" class="screen active">
+  <div id="screen-setup" class="screen active" role="main" aria-label="Setup screen">
 
     <!-- Header -->
-    <div class="app-header">
+    <header class="app-header">
       <div class="app-logo">
-        <div class="logo-icon">🚦</div>
+        <div class="logo-icon" aria-hidden="true">🚦</div>
         <h1>Transit Decision Engine</h1>
       </div>
       <p class="app-tagline">MISS IT OR WAIT? · Know before you go</p>
-    </div>
+    </header>
 
     <!-- GPS Location Banner -->
-    <div class="glass-card" style="padding:14px 16px;">
-      <div class="gps-banner" style="background:none;border:none;padding:0;">
-        <div class="gps-dot"></div>
+    <div class="glass-card gps-card" role="status" aria-live="polite" aria-label="GPS location status">
+      <div class="gps-banner-inner">
+        <div class="gps-dot" aria-hidden="true"></div>
         <div class="gps-info">
           <div class="gps-status" id="gps-status-text">Acquiring location...</div>
           <div class="gps-coords" id="gps-coords">Waiting for GPS...</div>
         </div>
+        <div class="gps-accuracy-badge" id="gps-accuracy-badge" style="display:none;"></div>
       </div>
-      <div style="margin-top:8px;font-size:0.7rem;color:var(--text-muted);" id="nearest-stop-info"></div>
+      <div class="nearest-stop-info" id="nearest-stop-info" aria-live="polite"></div>
     </div>
 
-    <!-- Your Pace Profile -->
-    <div class="glass-card">
-      <div class="section-label">Movement Profile · Google Fit</div>
-      <div class="fit-source-row">
-        <span class="fit-icon">💪</span>
-        <span class="fit-desc">Times below are estimated from your fitness data. Select the pace you'll use today.</span>
+    <!-- Google Fit Profile Card -->
+    <div class="glass-card fit-profile-card" id="fit-profile-card">
+      <div class="section-label">
+        <span class="section-label-icon">💪</span>
+        Movement Profile · Google Fit
+        <span class="fit-status-badge" id="fit-status-badge">NOT CONNECTED</span>
       </div>
-      <div class="speed-options">
-        <div class="speed-option" data-pace="casual" id="pace-casual">
-          <div class="check-badge">✓</div>
-          <div class="pace-icon">🚶</div>
+      <div class="fit-connect-row" id="fit-connect-row">
+        <div class="fit-connect-info">
+          <div class="fit-connect-title">Connect Google Fit</div>
+          <div class="fit-connect-desc">Import your real walking &amp; jogging speeds from your fitness history. More accurate than defaults.</div>
+        </div>
+        <button class="btn-fit-connect" id="btn-fit-connect" onclick="connectGoogleFit()" aria-label="Connect Google Fit account">
+          <span class="google-g" aria-hidden="true">G</span> Connect
+        </button>
+      </div>
+      <div class="fit-profile-data" id="fit-profile-data" style="display:none;">
+        <!-- Populated by JS after connect -->
+      </div>
+      <div class="speed-options" role="group" aria-label="Select walking pace">
+        <div class="speed-option" data-pace="casual" id="pace-casual" role="radio" aria-checked="false" tabindex="0" aria-label="Casual pace, about 4 kilometres per hour">
+          <div class="check-badge" aria-hidden="true">✓</div>
+          <div class="pace-icon" aria-hidden="true">🚶</div>
           <div class="pace-name">Casual</div>
           <div class="pace-speed">~4 km/h</div>
           <div class="pace-time" id="pace-time-casual">— min</div>
         </div>
-        <div class="speed-option selected" data-pace="brisk" id="pace-brisk">
-          <div class="check-badge">✓</div>
-          <div class="pace-icon">🚶‍♂️</div>
+        <div class="speed-option selected" data-pace="brisk" id="pace-brisk" role="radio" aria-checked="true" tabindex="0" aria-label="Brisk pace, about 5.5 kilometres per hour">
+          <div class="check-badge" aria-hidden="true">✓</div>
+          <div class="pace-icon" aria-hidden="true">🚶‍♂️</div>
           <div class="pace-name">Brisk</div>
           <div class="pace-speed">~5.5 km/h</div>
           <div class="pace-time" id="pace-time-brisk">— min</div>
         </div>
-        <div class="speed-option" data-pace="jog" id="pace-jog">
-          <div class="check-badge">✓</div>
-          <div class="pace-icon">🏃</div>
+        <div class="speed-option" data-pace="jog" id="pace-jog" role="radio" aria-checked="false" tabindex="0" aria-label="Jogging pace, about 9.4 kilometres per hour">
+          <div class="check-badge" aria-hidden="true">✓</div>
+          <div class="pace-icon" aria-hidden="true">🏃</div>
           <div class="pace-name">Jog</div>
           <div class="pace-speed">~9.4 km/h</div>
           <div class="pace-time" id="pace-time-jog">— min</div>
@@ -71,33 +89,38 @@
       </div>
       <div class="manual-speed-row">
         <label for="speed-slider">Fine-tune speed</label>
-        <input type="range" id="speed-slider" min="0.8" max="3.5" step="0.1" value="1.5" />
+        <input type="range" id="speed-slider" min="0.8" max="3.5" step="0.1" value="1.5" aria-label="Fine-tune walking speed in metres per second" />
         <span class="speed-val" id="speed-val-display">1.5 m/s</span>
       </div>
     </div>
 
-    <!-- Destination — z-index elevated so dropdown clears cards below -->
+    <!-- Destination -->
     <div class="glass-card dest-card">
-      <div class="section-label">Where are you headed?</div>
+      <div class="section-label"><span class="section-label-icon">📍</span>Where are you headed?</div>
       <div class="dest-input-wrap">
-        <span class="dest-icon">📍</span>
+        <span class="dest-icon" aria-hidden="true">📍</span>
         <input
           type="text"
           id="destination-input"
           placeholder="Type destination (e.g. Koramangala)"
           autocomplete="off"
+          aria-label="Enter your destination"
+          aria-autocomplete="list"
+          aria-controls="dest-suggestions"
+          role="combobox"
+          aria-expanded="false"
         />
-        <div class="dest-suggestions" id="dest-suggestions" style="display:none;"></div>
+        <div class="dest-suggestions" id="dest-suggestions" style="display:none;" role="listbox" aria-label="Destination suggestions"></div>
       </div>
     </div>
 
-    <!-- Weather Conditions — auto-fetched via Open-Meteo -->
-    <div class="glass-card">
-      <div class="section-label">Current Weather</div>
+    <!-- Weather Card -->
+    <div class="glass-card weather-card">
+      <div class="section-label"><span class="section-label-icon">🌤</span>Current Weather</div>
 
       <!-- Auto-detected row -->
-      <div class="weather-auto-row" id="weather-auto-row">
-        <div class="weather-auto-icon" id="weather-auto-icon">⏳</div>
+      <div class="weather-auto-row" id="weather-auto-row" role="status" aria-live="polite">
+        <div class="weather-auto-icon" id="weather-auto-icon" aria-hidden="true">⏳</div>
         <div class="weather-auto-info">
           <div class="weather-auto-label" id="weather-auto-label">Fetching weather...</div>
           <div class="weather-auto-detail" id="weather-auto-detail">Using your GPS location</div>
@@ -105,25 +128,30 @@
         <div class="weather-auto-badge" id="weather-auto-badge">AUTO</div>
       </div>
 
+      <!-- Hourly forecast strip -->
+      <div class="hourly-strip" id="hourly-strip" style="display:none;" aria-label="Hourly weather forecast">
+        <!-- Populated by JS -->
+      </div>
+
       <!-- Manual override toggle -->
-      <button class="weather-override-toggle" id="weather-override-toggle" onclick="toggleWeatherOverride()">
+      <button class="weather-override-toggle" id="weather-override-toggle" onclick="toggleWeatherOverride()" aria-expanded="false" aria-controls="weather-manual-options">
         ✏️ Override manually
       </button>
 
-      <!-- Manual options — hidden by default, shown on override -->
-      <div class="weather-options" id="weather-manual-options" style="display:none; margin-top:10px;">
-        <div class="weather-option selected" data-weather="clear" id="wx-clear">
-          <div class="wx-icon">☀️</div>
+      <!-- Manual options -->
+      <div class="weather-options" id="weather-manual-options" style="display:none;" role="group" aria-label="Manual weather selection">
+        <div class="weather-option selected" data-weather="clear" id="wx-clear" role="radio" aria-checked="true" tabindex="0" aria-label="Clear weather, normal walking speed">
+          <div class="wx-icon" aria-hidden="true">☀️</div>
           <div class="wx-name">Clear</div>
           <div class="wx-penalty">Normal speed</div>
         </div>
-        <div class="weather-option" data-weather="rain" id="wx-rain">
-          <div class="wx-icon">🌧</div>
+        <div class="weather-option" data-weather="rain" id="wx-rain" role="radio" aria-checked="false" tabindex="0" aria-label="Light rain, 18 percent speed penalty">
+          <div class="wx-icon" aria-hidden="true">🌧</div>
           <div class="wx-name">Light Rain</div>
           <div class="wx-penalty">−18% speed</div>
         </div>
-        <div class="weather-option" data-weather="heavy" id="wx-heavy">
-          <div class="wx-icon">⛈️</div>
+        <div class="weather-option" data-weather="heavy" id="wx-heavy" role="radio" aria-checked="false" tabindex="0" aria-label="Heavy rain, 38 percent speed penalty">
+          <div class="wx-icon" aria-hidden="true">⛈️</div>
           <div class="wx-name">Heavy Rain</div>
           <div class="wx-penalty">−38% speed</div>
         </div>
@@ -131,9 +159,17 @@
     </div>
 
     <!-- CTA -->
-    <button class="btn-primary" id="btn-check">
+    <button class="btn-primary" id="btn-check" aria-label="Check transit options for my location and destination">
       🔍 &nbsp;Check My Options
     </button>
+
+    <!-- Test harness (hidden, shown via ?test=1) -->
+    <div class="test-panel glass-card" id="test-panel" style="display:none;" role="region" aria-label="Test harness">
+      <div class="section-label">🧪 Test Harness</div>
+      <div class="test-panel-desc">Runs edge-case scenarios to validate the decision engine.</div>
+      <button class="btn-test" id="btn-run-tests" onclick="runTestSuite()" aria-label="Run all edge case tests">▶ Run 10 Edge Case Tests</button>
+      <div class="test-results" id="test-results"></div>
+    </div>
 
   </div><!-- /screen-setup -->
 
@@ -141,10 +177,10 @@
   <!-- ══════════════════════════════════════════════════════
        SCREEN 2 — LOADING / RADAR
   ═══════════════════════════════════════════════════════ -->
-  <div id="screen-loading" class="screen">
+  <div id="screen-loading" class="screen" role="status" aria-label="Loading transit data" aria-live="polite">
 
     <!-- Radar Animation -->
-    <div class="radar-wrap">
+    <div class="radar-wrap" aria-hidden="true">
       <div class="radar-ring"></div>
       <div class="radar-ring"></div>
       <div class="radar-ring"></div>
@@ -157,6 +193,7 @@
     </div>
 
     <div class="loading-title">Scanning Live Transit Data</div>
+    <div class="loading-subtitle" id="loading-subtitle">Pulling bus positions, occupancy &amp; metro coach data…</div>
 
     <div class="loading-steps" id="loading-steps">
       <!-- dynamically populated by app.js -->
@@ -168,67 +205,85 @@
   <!-- ══════════════════════════════════════════════════════
        SCREEN 3 — VERDICT
   ═══════════════════════════════════════════════════════ -->
-  <div id="screen-verdict" class="screen">
+  <div id="screen-verdict" class="screen" role="main" aria-label="Transit verdict screen">
 
     <!-- Header -->
-    <div class="app-header">
+    <header class="app-header">
       <div class="app-logo">
-        <div class="logo-icon">🚦</div>
+        <div class="logo-icon" aria-hidden="true">🚦</div>
         <h1>Transit Decision Engine</h1>
       </div>
       <p class="app-tagline">LIVE VERDICT</p>
-    </div>
+    </header>
 
     <!-- Verdict Banner -->
-    <div class="verdict-banner go" id="verdict-banner">
-      <span class="verdict-emoji" id="verdict-emoji">🏃</span>
+    <div class="verdict-banner go" id="verdict-banner" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="verdict-glow" aria-hidden="true"></div>
+      <span class="verdict-emoji" id="verdict-emoji" aria-hidden="true">🏃</span>
       <div class="verdict-text" id="verdict-text">LEAVE NOW — JOG!</div>
-      <div class="verdict-sub"  id="verdict-sub">Calculating...</div>
+      <div class="verdict-sub" id="verdict-sub">Calculating...</div>
     </div>
 
     <!-- Departure Countdown Timer -->
-    <div class="departure-timer glass-card">
-      <div class="timer-label">
-        <div class="tl-top">Departure window</div>
-        <div class="tl-desc" id="timer-desc">until you must leave</div>
-        <div class="pace-badge walk" id="pace-badge">🚶‍♂️ Brisk Walk</div>
+    <div class="departure-timer glass-card" role="timer" aria-live="off" aria-label="Departure countdown timer">
+      <div class="timer-left">
+        <div class="timer-label-top">Departure window</div>
+        <div class="timer-desc" id="timer-desc">until you must leave</div>
+        <div class="pace-badge walk" id="pace-badge" role="status" aria-live="polite">🚶‍♂️ Brisk Walk</div>
       </div>
-      <div>
-        <div class="timer-display" id="timer-display" style="color:var(--amber);">—</div>
-        <div style="font-size:0.6rem;color:var(--text-muted);text-align:right;margin-top:2px;">HH:MM:SS</div>
+      <div class="timer-right">
+        <div class="timer-urgency-ring" id="timer-urgency-ring" aria-hidden="true">
+          <svg class="urgency-svg" viewBox="0 0 80 80" aria-hidden="true">
+            <circle class="urgency-track" cx="40" cy="40" r="34"/>
+            <circle class="urgency-progress" id="urgency-progress" cx="40" cy="40" r="34"/>
+          </svg>
+          <div class="timer-display" id="timer-display" aria-live="off">—</div>
+        </div>
+        <div class="timer-hms-label" aria-hidden="true">MM:SS</div>
       </div>
     </div>
 
-    <!-- Primary Bus Card -->
-    <div class="section-label" style="padding: 0 4px;">🚌 Bus Options</div>
+    <!-- Journey Route Diagram -->
+    <div class="glass-card journey-card" id="journey-card" aria-label="Journey route overview">
+      <div class="section-label"><span class="section-label-icon">🗺</span>Your Journey</div>
+      <div class="journey-diagram" id="journey-diagram">
+        <!-- Populated by JS -->
+      </div>
+    </div>
 
-    <div class="transit-card primary glass-card" id="bus-card-primary">
+    <!-- Bus Options -->
+    <div class="section-label" style="padding: 0 4px;" aria-label="Bus options section">
+      <span class="section-label-icon">🚌</span> Bus Options
+    </div>
+
+    <div class="transit-card primary glass-card" id="bus-card-primary" aria-label="Primary bus option">
       <!-- rendered by JS -->
     </div>
 
-    <div class="transit-card secondary glass-card" id="bus-card-secondary">
+    <div class="transit-card secondary glass-card" id="bus-card-secondary" aria-label="Alternative bus option">
       <!-- rendered by JS -->
     </div>
 
     <!-- Metro Card -->
-    <div class="section-label" style="padding: 0 4px;">🚇 Metro Alternative</div>
+    <div class="section-label" style="padding: 0 4px;" aria-label="Metro options section">
+      <span class="section-label-icon">🚇</span> Metro Alternative
+    </div>
 
-    <div class="transit-card glass-card" id="metro-card"
-         style="border-color: rgba(179,136,255,0.25);">
+    <div class="transit-card glass-card metro-outer-card" id="metro-card" aria-label="Metro transit option">
       <!-- rendered by JS -->
     </div>
 
     <!-- Comparison Breakdown -->
-    <div class="glass-card comparison-card" id="comparison-card">
+    <div class="glass-card comparison-card" id="comparison-card" aria-label="Decision comparison breakdown">
       <!-- rendered by JS -->
     </div>
 
     <!-- Action Buttons -->
-    <div class="action-row">
-      <button class="btn-secondary" id="btn-back">
+    <div class="action-row" role="group" aria-label="Navigation actions">
+      <button class="btn-secondary" id="btn-back" aria-label="Go back to setup screen">
         ← Back
       </button>
-      <button class="btn-recalc" id="btn-recalc">
+      <button class="btn-recalc" id="btn-recalc" aria-label="Recalculate transit options with fresh data">
         🔄 Recalculate
       </button>
     </div>
