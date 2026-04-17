@@ -113,10 +113,10 @@ User Location + Destination
             │
             ▼
 ┌───────────────────────┐     ┌──────────────────────────┐
-│   Bus Data Layer      │     │   Metro Data Layer        │
-│  · Live GPS location  │     │  · Live train schedule    │
-│  · Occupancy %        │     │  · Per-coach fill level   │
-│    (KSRTC ticketing)  │     │    (weight sensor data)   │
+│   Bus Data Layer      │     │   Metro Data Layer       │
+│  · Live GPS location  │     │  · Live train schedule   │
+│  · Occupancy %        │     │  · Per-coach fill level  │
+│    (KSRTC ticketing)  │     │    (weight sensor data)  │
 └───────────┬───────────┘     └──────────────┬───────────┘
             │                                │
             └──────────────┬─────────────────┘
